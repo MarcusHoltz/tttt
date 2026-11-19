@@ -1,25 +1,28 @@
 name: message-me-cve
 
-# One job checks every profiles/<name>.txt against one fetch of KEV and NVD.
-# NVD: poll for changes no more than once every two hours, from one requestor.
-# Every hour, 12:xx to 22:xx UTC; the program skips NVD when it was polled
-# under 2 h ago, so late or bunched runs stay within the NVD rule. The
-# minute is a random prime written by schedule.sh; do not edit it by hand.
+# Self-chaining: every run ends by dispatching the next one, after the
+# "tick" environment's wait timer (no runner used while waiting).
+# GitHub's cron starts runs hours late or not at all; it is only a backup
+# that restarts the chain if it ever breaks. The concurrency group keeps at
+# most one run going and one pending, so extra chains merge into one.
+# NVD is polled at most every 2 h; the program enforces that itself.
 on:
   schedule:
-    - cron: '41 12-22 * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write
+
+concurrency:
+  group: message-me-cve
+  cancel-in-progress: false
 
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 80
-    concurrency:
-      group: message-me-cve
-      cancel-in-progress: false
     env:
       PROFILES_DIR: profiles
     steps:
@@ -45,16 +48,30 @@ jobs:
           git config user.email message-me-cve@users.noreply.github.com
           git add state
           git diff --cached --quiet && exit 0
-          # Written by the check step: which profiles sent or failed.
           msg="$RUNNER_TEMP/message-me-cve-commit.txt"
           if [ -f "$msg" ]; then
             git commit -F "$msg"
           else
             git commit -m "message-me-cve: update state"
           fi
-          # A push to main may land between our pull and push; retry.
           for i in 1 2 3 4 5; do
             git pull --rebase && git push && exit 0
             sleep $((i * 5))
+          done
+          exit 1
+
+  next:
+    needs: check
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: tick
+    steps:
+      - name: Dispatch next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh workflow run message-me-cve.yml -R "$GITHUB_REPOSITORY" --ref main && exit 0
+            sleep $((i * 10))
           done
           exit 1
