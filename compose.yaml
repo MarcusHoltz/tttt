@@ -1,0 +1,14 @@
+services:
+  message-me-cve:
+    build: .
+    image: message-me-cve
+    user: "1000:1000"
+    restart: unless-stopped
+    environment:
+      INTERVAL: 2h
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./watch.txt:/data/watch.txt:ro
+      - ./state:/data/state

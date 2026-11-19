@@ -1,0 +1,60 @@
+name: message-me-cve
+
+# One job checks every profiles/<name>.txt against one fetch of KEV and NVD.
+# NVD: poll for changes no more than once every two hours, from one requestor.
+# Every hour, 12:xx to 22:xx UTC; the program skips NVD when it was polled
+# under 2 h ago, so late or bunched runs stay within the NVD rule. The
+# minute is a random prime written by schedule.sh; do not edit it by hand.
+on:
+  schedule:
+    - cron: '41 12-22 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    concurrency:
+      group: message-me-cve
+      cancel-in-progress: false
+    env:
+      PROFILES_DIR: profiles
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Check feeds and send alerts
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: go run .
+
+      - name: Save state
+        if: always()
+        run: |
+          git config user.name message-me-cve
+          git config user.email message-me-cve@users.noreply.github.com
+          git add state
+          git diff --cached --quiet && exit 0
+          # Written by the check step: which profiles sent or failed.
+          msg="$RUNNER_TEMP/message-me-cve-commit.txt"
+          if [ -f "$msg" ]; then
+            git commit -F "$msg"
+          else
+            git commit -m "message-me-cve: update state"
+          fi
+          # A push to main may land between our pull and push; retry.
+          for i in 1 2 3 4 5; do
+            git pull --rebase && git push && exit 0
+            sleep $((i * 5))
+          done
+          exit 1

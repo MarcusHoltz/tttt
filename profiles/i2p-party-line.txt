@@ -1,0 +1,9 @@
+# i2p-party-line: one word per line, matched against CISA KEV and NVD
+# vendor/product names.
+i2pd
+openssl
+opus
+socat
+pulseaudio
+# CPython only; plain "python" also matches every PyPI package NVD files under vendor "python".
+python python

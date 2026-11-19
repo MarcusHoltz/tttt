@@ -1,0 +1,3 @@
+# One word per line. Matched against the vendor/product names in
+# CISA KEV and NVD. Add your stack here, e.g. nginx, mysql, wordpress.
+php

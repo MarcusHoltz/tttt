@@ -1,0 +1,10 @@
+# tor-party-line: one word per line, matched against CISA KEV and NVD
+# vendor/product names.
+tor
+openssl
+libsodium
+opus
+socat
+pulseaudio
+# CPython only; plain "python" also matches every PyPI package NVD files under vendor "python".
+python python

@@ -1,0 +1,13 @@
+# party-line-pager: one word per line, matched against CISA KEV and NVD
+# vendor/product names.
+tokio
+reqwest
+openssl
+yopass
+ttyd
+signal-cli
+apprise
+docker
+reticulum
+lxmf
+libsodium

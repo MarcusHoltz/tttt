@@ -1,0 +1,14 @@
+# partyline-suite: one word per line, matched against CISA KEV and NVD
+# vendor/product names.
+selkies
+# CPython only; plain "python" also matches every PyPI package NVD files under vendor "python".
+python python
+ffmpeg
+pulseaudio
+pipewire
+portaudio
+pillow
+numpy
+cryptography
+reticulum
+lxmf
