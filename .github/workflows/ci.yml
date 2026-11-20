@@ -1,7 +1,7 @@
 name: ci
 
 # Push to main: test, build the image, then promote the commit to the live
-# branch, which the hourly check runs. A commit that fails here never runs.
+# branch, which the check runs. A commit that fails here never runs.
 on:
   push:
     branches: [main]

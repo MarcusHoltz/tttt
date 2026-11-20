@@ -18,7 +18,7 @@
 ## Overview
 
 Each project gets a watch list, one product per line: `php`, `nginx`,
-`wordpress`. Every hour, GitHub Actions checks the lists against:
+`wordpress`. Every 2 hours, GitHub Actions checks the lists against:
 
 - **[CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)**:
   vulnerabilities exploited in the wild. Sent as `ACT NOW`, urgent.
@@ -56,9 +56,9 @@ message-me-cve: NVD OK again
 
 4. Put one watch list per project in `profiles/<name>.txt`. Commit and
    push to `main`. CI tests the commit and, if it passes, pushes it to the
-   `live` branch. The hourly check runs `live`.
+   `live` branch. The check runs `live`.
 5. When CI is green, **Actions > message-me-cve > Run workflow** to check
-   the setup. After that it runs every hour.
+   the setup. After that, each run starts the next one 2 hours later.
 
 Check delivery without waiting for a CVE:
 
@@ -83,7 +83,7 @@ repos after 60 days without repository activity. An outside monitor that
 alerts when pings stop covers this:
 
 - [healthchecks.io](https://healthchecks.io/) (free): create a check with
-  period 1 hour, grace 3 hours (GitHub starts scheduled runs late). Its
+  period 2 hours, grace 1 hour. Its
   ping URL is `HEARTBEAT_URL`. Any monitor that waits for an HTTP GET
   works, for example an Uptime Kuma push monitor.
 - Pinged after a run that saved its state and delivered every message.
@@ -143,11 +143,12 @@ result per channel.
 | Highest CVSS from any source | NVD often scores new CVEs weeks late. The publisher's score (F5 for NGINX, for example) arrives with the CVE. 3.x first, 4.0 if no 3.x. Unscored CVEs wait until a score appears. |
 | State on its own branch | `main` history holds code changes only. One writer (the concurrency group), so no merge conflicts. |
 | One run, then exit | Scheduling belongs to the scheduler (Actions, cron, systemd timer). |
-| The hourly check runs `live`, not `main` | CI pushes a commit to `live` only after gofmt, vet, staticcheck, tests, govulncheck and the image smoke test pass. A broken push to `main` never runs. The push is fast-forward only, so a commit whose CI finishes late cannot roll `live` back. |
+| Each run starts the next one | Since late August 2026 GitHub starts scheduled runs hours late or drops them ([community #207346](https://github.com/orgs/community/discussions/207346), [#210932](https://github.com/orgs/community/discussions/210932)); here an hourly cron ran once in 14 hours. `workflow_dispatch` runs start within seconds. The last job waits 2 hours, then starts the next run. The hourly cron only restarts the chain if it breaks. One pending run per concurrency group, so a cron or manual run that queues behind the chain is replaced and there is only ever one chain. |
+| The check runs `live`, not `main` | CI pushes a commit to `live` only after gofmt, vet, staticcheck, tests, govulncheck and the image smoke test pass. A broken push to `main` never runs. The push is fast-forward only, so a commit whose CI finishes late cannot roll `live` back. |
 | Heartbeat to an outside monitor | A check that does not run cannot report it. Only something outside GitHub Actions can notice the silence. |
 | No write token in the check step | Checkouts do not keep credentials, and the token is passed only to the step that pushes state. The step that parses third-party feed data cannot read it. |
 | Pinned, and updated by Dependabot | Actions by commit SHA, the base image by digest, staticcheck and govulncheck in `tools/go.mod` with checksums. Dependabot opens update PRs weekly; CI gates them like any commit. |
-| govulncheck weekly, newest Go patch | New vulnerabilities in Go appear without a commit. CI and the hourly check install the newest 1.27.x, not the runner's cached one: Go security fixes ship as patch releases. |
+| govulncheck weekly, newest Go patch | New vulnerabilities in Go appear without a commit. CI and the check install the newest 1.27.x, not the runner's cached one: Go security fixes ship as patch releases. |
 
 
 ## Limitations
@@ -157,8 +158,12 @@ result per channel.
   alerts list `Fixed in` versions when NVD gives them.
 - **Word matching is name matching.** NVD files every PyPI package under
   vendor `python`; write `python python` to mean CPython only.
-- **Latency is the schedule's.** Hourly at best; later when GitHub delays
-  scheduled runs.
+- **Latency is up to about 2 hours** while the chain runs. If it breaks,
+  the hourly cron restarts it, and GitHub can delay that by hours.
+- **The wait uses a runner.** The 2-hour wait keeps a runner busy almost
+  all day. Free in public repos; billed in private repos.
+- **A manual run during the wait does not run.** It queues, and the
+  chain's next run replaces it, up to 2 hours later.
 - **The workflow file is not gated.** GitHub runs scheduled workflows from
   the default branch, so a change to `message-me-cve.yml` applies at the
   next run without CI. Code and watch lists go through `live`.

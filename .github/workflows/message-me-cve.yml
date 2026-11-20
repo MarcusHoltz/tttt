@@ -84,7 +84,7 @@ jobs:
       actions: write # start the next run
     steps:
       - name: Wait 2 h
-        run: sleep 60
+        run: sleep 7200
 
       - name: Start the next run
         env:

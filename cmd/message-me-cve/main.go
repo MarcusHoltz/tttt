@@ -1,6 +1,6 @@
 // Command message-me-cve checks watch lists against CISA KEV and NVD once,
 // pushes alerts to ntfy and/or Telegram, and exits non-zero while anything
-// is broken. Scheduling is left to the caller (GitHub Actions cron).
+// is broken. Scheduling is left to the caller (the GitHub Actions workflow).
 package main
 
 import (
