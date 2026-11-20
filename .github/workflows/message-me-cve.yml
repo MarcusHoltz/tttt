@@ -1,9 +1,11 @@
 name: message-me-cve
 
-# Hourly, at :17 rather than :00, GitHub's busiest minute. GitHub starts
-# scheduled runs late or drops them under load; that only delays alerts:
-# KEV is read in full every run and the NVD cursor covers any gap. NVD is
-# polled at most every 2 h, enforced by the program, not by this schedule.
+# Every 2 h: each run ends by starting the next one (job "next"). GitHub
+# starts scheduled runs hours late or drops them, while workflow_dispatch
+# runs start within seconds. The hourly cron only restarts the chain if it
+# ever breaks. Late runs only delay alerts: KEV is read in full every run
+# and the NVD cursor covers any gap. NVD is polled at most every 2 h,
+# enforced by the program.
 on:
   schedule:
     - cron: '17 * * * *'
@@ -68,3 +70,28 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -q -m "state: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           git push -q "https://x-access-token:$TOKEN@github.com/$GITHUB_REPOSITORY.git" HEAD:state
+
+  # Wait, then start the next run. Runs after a failed check too, so one
+  # failure does not stop the chain. A cron or manual run that queues
+  # behind this one is replaced by the run started here (one pending run
+  # per concurrency group), so there is only ever one chain.
+  next:
+    needs: check
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    permissions:
+      actions: write # start the next run
+    steps:
+      - name: Wait 2 h
+        run: sleep 60
+
+      - name: Start the next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in 1 2 3 4 5; do
+            gh workflow run message-me-cve.yml -R "$GITHUB_REPOSITORY" --ref main && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
