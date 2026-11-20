@@ -30,7 +30,7 @@ const (
 	exitUsage  = 2 // bad configuration; nothing ran
 )
 
-func main()  { os.Exit(run()) }
+func main() { os.Exit(run()) }
 
 func run() int {
 	profilesDir := flag.String("profiles", "profiles", "directory of <name>.txt watch lists")
