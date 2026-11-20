@@ -8,12 +8,11 @@ name: message-me-cve
 # NVD is polled at most every 2 h; the program enforces that itself.
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: message-me-cve
@@ -60,18 +59,3 @@ jobs:
           done
           exit 1
 
-  next:
-    needs: check
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    environment: tick
-    steps:
-      - name: Dispatch next run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for i in 1 2 3 4 5; do
-            gh workflow run message-me-cve.yml -R "$GITHUB_REPOSITORY" --ref main && exit 0
-            sleep $((i * 10))
-          done
-          exit 1
