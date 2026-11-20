@@ -90,6 +90,18 @@ func TestNVDRetriesThenFails(t *testing.T) {
 	}
 }
 
+func TestNVDNoRetryOnClientError(t *testing.T) {
+	calls := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotFound)
+	})
+	now := time.Now()
+	if _, err := c.NVD(context.Background(), now.Add(-time.Hour), now); err == nil || calls != 1 {
+		t.Errorf("HTTP 404: err %v, calls %d; want error after 1 call", err, calls)
+	}
+}
+
 func TestKEVFallback(t *testing.T) {
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/down" {

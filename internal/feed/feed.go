@@ -31,6 +31,27 @@ type Error struct {
 func (e *Error) Error() string { return e.Feed + ": " + e.Err.Error() }
 func (e *Error) Unwrap() error { return e.Err }
 
+// HTTPError is a response other than 200 OK.
+type HTTPError struct {
+	URL    string // without the query
+	Status int
+}
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("%s: HTTP %d", e.URL, e.Status) }
+
+// transient reports whether a request may succeed if repeated: network
+// errors, rate limiting and server errors. A 4xx means the request is wrong.
+func transient(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var he *HTTPError
+	if errors.As(err, &he) {
+		return he.Status == http.StatusTooManyRequests || he.Status >= 500
+	}
+	return true
+}
+
 // Backoff bounds the retries of a failing NVD request.
 type Backoff struct {
 	Budget time.Duration // give up once the next wait would pass this
@@ -159,14 +180,14 @@ func (c *Client) nvdPage(ctx context.Context, from, to time.Time, index int) (*n
 	return &page, err
 }
 
-// retry runs fn with exponential backoff until it succeeds, the budget is
-// spent or ctx is done.
+// retry runs fn with exponential backoff until it succeeds, fails for good,
+// the budget is spent or ctx is done.
 func (c *Client) retry(ctx context.Context, fn func() error) error {
 	deadline := time.Now().Add(c.NVDRetry.Budget)
 	wait := c.NVDRetry.First
 	for {
 		err := fn()
-		if err == nil || time.Now().Add(wait).After(deadline) {
+		if err == nil || !transient(err) || time.Now().Add(wait).After(deadline) {
 			return err
 		}
 		if c.Log != nil {
@@ -218,7 +239,7 @@ func (c *Client) getJSON(ctx context.Context, u string, headers map[string]strin
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: HTTP %d", strings.SplitN(u, "?", 2)[0], resp.StatusCode)
+		return &HTTPError{URL: strings.SplitN(u, "?", 2)[0], Status: resp.StatusCode}
 	}
 	return json.NewDecoder(resp.Body).Decode(v)
 }
