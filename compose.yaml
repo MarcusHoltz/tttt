@@ -1,14 +1,14 @@
+# One check, then exit. Schedule it with the host's cron or a systemd timer:
+#   docker compose run --rm message-me-cve
+#   docker compose run --rm message-me-cve -dry-run
 services:
   message-me-cve:
     build: .
     image: message-me-cve
     user: "1000:1000"
-    restart: unless-stopped
-    environment:
-      INTERVAL: 2h
     env_file:
       - path: .env
         required: false
     volumes:
-      - ./watch.txt:/data/watch.txt:ro
+      - ./profiles:/data/profiles:ro
       - ./state:/data/state

@@ -1,19 +1,18 @@
 name: message-me-cve
 
-# Self-chaining: every run ends by dispatching the next one, after the
-# "tick" environment's wait timer (no runner used while waiting).
-# GitHub's cron starts runs hours late or not at all; it is only a backup
-# that restarts the chain if it ever breaks. The concurrency group keeps at
-# most one run going and one pending, so extra chains merge into one.
-# NVD is polled at most every 2 h; the program enforces that itself.
+# Hourly, at :17 rather than :00, GitHub's busiest minute. GitHub starts
+# scheduled runs late or drops them under load; that only delays alerts:
+# KEV is read in full every run and the NVD cursor covers any gap. NVD is
+# polled at most every 2 h, enforced by the program, not by this schedule.
 on:
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write # push state to the state branch
 
+# One run at a time: the state branch has a single writer.
 concurrency:
   group: message-me-cve
   cancel-in-progress: false
@@ -21,11 +20,15 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 80
-    env:
-      PROFILES_DIR: profiles
+    timeout-minutes: 80 # one 60-minute round of NVD retries, plus margin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check out state
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: state
+          path: state
 
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
@@ -38,24 +41,16 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: go run .
+        run: go run ./cmd/message-me-cve -profiles profiles -state state/state.json
 
+      # Also after a failed check: alerts it delivered must stay marked sent.
       - name: Save state
         if: always()
+        working-directory: state
         run: |
           git config user.name message-me-cve
           git config user.email message-me-cve@users.noreply.github.com
-          git add state
+          git add state.json
           git diff --cached --quiet && exit 0
-          msg="$RUNNER_TEMP/message-me-cve-commit.txt"
-          if [ -f "$msg" ]; then
-            git commit -F "$msg"
-          else
-            git commit -m "message-me-cve: update state"
-          fi
-          for i in 1 2 3 4 5; do
-            git pull --rebase && git push && exit 0
-            sleep $((i * 5))
-          done
-          exit 1
-
+          git commit -q -m "state: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push -q
