@@ -1,6 +1,6 @@
 module github.com/MarcusHoltz/message-me-cve/tools
 
-go 1.27.4
+go 1.27
 
 tool (
 	golang.org/x/vuln/cmd/govulncheck

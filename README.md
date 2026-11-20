@@ -122,7 +122,7 @@ apache http server
 5. Send. Mark each alert sent, per profile, only after every channel
    accepted it.
 6. Move the NVD cursor to now only if everything from NVD was handled.
-7. Ping `HEARTBEAT_URL` if the state was saved and every message was
+7. Ping `HEARTBEAT_URL` if `state.json` was written and every message was
    delivered.
 8. Commit `state.json` to the `state` branch. Exit 1 if anything is
    failing.
@@ -145,9 +145,9 @@ result per channel.
 | One run, then exit | Scheduling belongs to the scheduler (Actions, cron, systemd timer). |
 | The hourly check runs `live`, not `main` | CI pushes a commit to `live` only after gofmt, vet, staticcheck, tests, govulncheck and the image smoke test pass. A broken push to `main` never runs. The push is fast-forward only, so a commit whose CI finishes late cannot roll `live` back. |
 | Heartbeat to an outside monitor | A check that does not run cannot report it. Only something outside GitHub Actions can notice the silence. |
-| Write token only in the push step | Checkouts do not keep credentials. The step that parses third-party feed data has no token on disk. |
+| No write token in the check step | Checkouts do not keep credentials, and the token is passed only to the step that pushes state. The step that parses third-party feed data cannot read it. |
 | Pinned, and updated by Dependabot | Actions by commit SHA, the base image by digest, staticcheck and govulncheck in `tools/go.mod` with checksums. Dependabot opens update PRs weekly; CI gates them like any commit. |
-| govulncheck weekly, not only on push | New vulnerabilities in Go appear without a commit. |
+| govulncheck weekly, newest Go patch | New vulnerabilities in Go appear without a commit. CI and the hourly check install the newest 1.27.x, not the runner's cached one: Go security fixes ship as patch releases. |
 
 
 ## Limitations
@@ -229,7 +229,7 @@ docker run --rm -v "$PWD":/src -w /src golang:1.27 sh -c \
    go tool -modfile=tools/go.mod govulncheck ./...'
 ```
 
-CI (`.github/workflows/ci.yml`), on every push, PR, and weekly:
+CI (`.github/workflows/ci.yml`), on pushes to `main`, PRs, and weekly:
 
 - `test`: gofmt, `go vet`, staticcheck, `go test -race`, govulncheck.
 - `image`: builds the Dockerfile and runs it once with `-dry-run`.

@@ -27,6 +27,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+          # Newest 1.27.x, not whatever the runner has cached: Go security
+          # fixes ship as patch releases.
+          check-latest: true
 
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -71,7 +74,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write # push the live branch
-    # Promotions in push order. A plain push is fast-forward only, so an
+    # One promotion at a time. A plain push is fast-forward only, so an
     # older commit that finishes CI late cannot roll live back.
     concurrency:
       group: promote
@@ -84,4 +87,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - run: git push origin HEAD:refs/heads/live
+      # live already contains this commit when a newer one finished CI
+      # first. The push would be rejected and fail a run that found nothing
+      # wrong, so skip it. A live that is neither behind nor ahead (main
+      # was rewritten) still fails the push: that needs a person.
+      - run: |
+          if git merge-base --is-ancestor HEAD origin/live 2>/dev/null; then
+            echo "live is at $(git rev-parse --short origin/live), which contains this commit"
+            exit 0
+          fi
+          git push origin HEAD:refs/heads/live
