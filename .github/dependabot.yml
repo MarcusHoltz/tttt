@@ -12,11 +12,18 @@ updates:
     schedule:
       interval: weekly
 
-  # staticcheck and govulncheck.
+  # staticcheck and govulncheck. go get -tool records them as indirect,
+  # which Dependabot skips by default. Only the two tool modules: bumping
+  # one also moves the dependencies it requires.
   - package-ecosystem: gomod
     directory: /tools
     schedule:
       interval: weekly
+    allow:
+      - dependency-name: golang.org/x/vuln
+        dependency-type: all
+      - dependency-name: honnef.co/go/tools
+        dependency-type: all
     groups:
       tools:
         patterns:
