@@ -273,3 +273,14 @@ func TestDryRunSendsNothing(t *testing.T) {
 		t.Errorf("sent %d, deliveries %d, state %v", len(s.sent), len(res.Deliveries), st.Sent)
 	}
 }
+
+func TestDeletedWatchListForgotten(t *testing.T) {
+	c, s, st := setup(&fakeFeeds{})
+	bad := Profile{Name: "gone", Err: errors.New("no words")}
+	c.Run(context.Background(), now, []Profile{bad, shop}, st)
+	c.Run(context.Background(), now.Add(time.Hour), []Profile{shop}, st) // gone.txt deleted
+	c.Run(context.Background(), now.Add(2*time.Hour), []Profile{bad, shop}, st)
+	if got := strings.Count(s.titles(), "cannot check watch list gone"); got != 2 {
+		t.Errorf("re-added broken list reported %d times, want 2:\n%s", got, s.titles())
+	}
+}

@@ -41,6 +41,14 @@ func TestTelegramErrorHidesToken(t *testing.T) {
 	}
 }
 
+func TestNtfyErrorHidesTopic(t *testing.T) {
+	n := &Ntfy{URL: "http://127.0.0.1:1/secret-topic", HTTP: http.DefaultClient}
+	err := n.Send(context.Background(), Message{})
+	if err == nil || strings.Contains(err.Error(), "secret-topic") {
+		t.Errorf("error %q leaks the topic or is nil", err)
+	}
+}
+
 func TestTelegramPacing(t *testing.T) {
 	var at []time.Time
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

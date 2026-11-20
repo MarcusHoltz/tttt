@@ -78,16 +78,18 @@ func (t *Telegram) Send(ctx context.Context, m Message) error {
 	// Pace from the reply: Telegram has this message now, so the next one
 	// arrives at least Gap later.
 	t.last = time.Now()
-	var ue *url.Error
-	if errors.As(err, &ue) {
-		err = ue.Err // url.Error prints the URL, which holds the token
-	}
 	return err
 }
 
 func do(c *http.Client, req *http.Request) error {
 	resp, err := c.Do(req)
 	if err != nil {
+		// url.Error prints the URL, which is a secret for both channels:
+		// the ntfy topic and the Telegram bot token.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return ue.Err
+		}
 		return err
 	}
 	defer resp.Body.Close()

@@ -176,6 +176,7 @@ match is sent again, plus the last 7 days of NVD.
 Same program, scheduled by the host instead of Actions:
 
 ```bash
+mkdir -p state   # else Docker creates it as root and UID 1000 cannot write
 docker compose run --rm message-me-cve -dry-run
 docker compose run --rm message-me-cve
 ```

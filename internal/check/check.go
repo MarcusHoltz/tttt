@@ -35,6 +35,8 @@ const (
 	maxSingle = 5
 	// ntfy turns bodies over 4096 bytes into attachments.
 	maxBody = 3500
+
+	watchListPrefix = "watch list " // Broken key prefix
 )
 
 // Profile is one watch list. Err is set when it could not be read.
@@ -115,13 +117,20 @@ func (r *run) run(profiles []Profile) *Result {
 	var active []Profile
 	for _, p := range profiles {
 		r.res.Profiles = append(r.res.Profiles, ProfileReport{Name: p.Name, Words: len(p.Words), ReadErr: p.Err})
-		r.track("watch list "+p.Name, p.Err)
+		r.track(watchListPrefix+p.Name, p.Err)
 		if p.Err == nil {
 			active = append(active, p)
 		}
 	}
 	for i := range r.res.Profiles {
 		r.reports[r.res.Profiles[i].Name] = &r.res.Profiles[i]
+	}
+	// A deleted watch list cannot recover; forget that it was broken, so a
+	// new list with the same name is reported if it breaks.
+	for name := range r.st.Broken {
+		if p, ok := strings.CutPrefix(name, watchListPrefix); ok && r.reports[p] == nil {
+			delete(r.st.Broken, name)
+		}
 	}
 
 	kev, err := r.Feeds.KEV(r.ctx)
