@@ -77,6 +77,11 @@ jobs:
       group: promote
       cancel-in-progress: false
     steps:
+      # Full history: git checks the fast-forward locally, and needs the
+      # commit live points at. A shallow clone rejects every push but the
+      # first.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - run: git push origin HEAD:refs/heads/live
