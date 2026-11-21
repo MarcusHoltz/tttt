@@ -1,4 +1,4 @@
-// Package check runs one check of every watch list against the feeds and
+// This file runs one check of every watch list against the feeds and
 // delivers the alerts.
 //
 // Rules that hold for every run:
@@ -9,7 +9,8 @@
 //   - NVD is polled at most every two hours, as NVD asks of API clients.
 //     The NVD cursor only moves past changes that were fully handled, so a
 //     late, skipped or failed run leaves no gap.
-package check
+
+package main
 
 import (
 	"context"
@@ -18,11 +19,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/MarcusHoltz/message-me-cve/internal/feed"
-	"github.com/MarcusHoltz/message-me-cve/internal/match"
-	"github.com/MarcusHoltz/message-me-cve/internal/notify"
-	"github.com/MarcusHoltz/message-me-cve/internal/state"
 )
 
 const (
@@ -46,17 +42,17 @@ type Profile struct {
 	Err   error
 }
 
-// Feeds is what a check reads. *feed.Client implements it.
+// Feeds is what a check reads. *FeedClient implements it.
 type Feeds interface {
-	KEV(ctx context.Context) ([]feed.KEVEntry, error)
-	NVD(ctx context.Context, start, end time.Time) ([]feed.CVE, error)
+	KEV(ctx context.Context) ([]KEVEntry, error)
+	NVD(ctx context.Context, start, end time.Time) ([]CVE, error)
 	Affected(ctx context.Context, id string) ([]string, error)
 }
 
 // Checker holds the dependencies of a check.
 type Checker struct {
 	Feeds   Feeds
-	Senders []notify.Sender
+	Senders []Sender
 	// DryRun logs messages instead of sending them. The caller must not
 	// save the state afterwards.
 	DryRun bool
@@ -66,7 +62,7 @@ type Checker struct {
 // Delivery is one message and what each channel did with it.
 type Delivery struct {
 	At      time.Time
-	Message notify.Message
+	Message Message
 	Results []string // "telegram: delivered", "ntfy: HTTP 500: ..."
 	OK      bool
 }
@@ -91,7 +87,7 @@ type Result struct {
 func (r *Result) OK() bool { return len(r.Problems) == 0 }
 
 // Run checks every profile once. It updates st; the caller saves it.
-func (c *Checker) Run(ctx context.Context, now time.Time, profiles []Profile, st *state.State) *Result {
+func (c *Checker) Run(ctx context.Context, now time.Time, profiles []Profile, st *State) *Result {
 	r := &run{Checker: c, ctx: ctx, now: now, st: st, res: &Result{},
 		affected: map[string]affectedResult{}}
 	return r.run(profiles)
@@ -101,7 +97,7 @@ type run struct {
 	*Checker
 	ctx      context.Context
 	now      time.Time
-	st       *state.State
+	st       *State
 	res      *Result
 	affected map[string]affectedResult // CVE.org lookups, one per CVE per run
 	reports  map[string]*ProfileReport
@@ -188,7 +184,7 @@ func (r *run) track(name string, err error) {
 	_, was := r.st.Broken[name]
 	switch {
 	case err != nil && !was:
-		msg := notify.Message{
+		msg := Message{
 			Title:  "message-me-cve: cannot check " + name,
 			Body:   name + " is failing. You are NOT covered until this clears.\n" + err.Error(),
 			Urgent: true,
@@ -197,7 +193,7 @@ func (r *run) track(name string, err error) {
 			r.st.Broken[name] = err.Error()
 		}
 	case err == nil && was:
-		msg := notify.Message{Title: "message-me-cve: " + name + " OK again", Body: name + " is working again."}
+		msg := Message{Title: "message-me-cve: " + name + " OK again", Body: name + " is working again."}
 		if r.send(msg) {
 			delete(r.st.Broken, name)
 		}
@@ -209,8 +205,8 @@ type alert struct {
 	key      string // "kev:CVE-..." or "nvd:CVE-..."
 	profiles []string
 	words    []string
-	kev      *feed.KEVEntry
-	cve      *feed.CVE
+	kev      *KEVEntry
+	cve      *CVE
 	cveOrg   bool // NVD match came from the CVE.org record
 }
 
@@ -239,13 +235,13 @@ func (s *alertSet) add(key, profile, word string) *alert {
 	return a
 }
 
-func (r *run) matchKEV(kev []feed.KEVEntry, profiles []Profile) []*alert {
+func (r *run) matchKEV(kev []KEVEntry, profiles []Profile) []*alert {
 	var set alertSet
 	for i := range kev {
 		e := &kev[i]
 		key := "kev:" + e.CveID
 		for _, p := range profiles {
-			if w := match.KEV(*e, p.Words); w != "" && !r.st.WasSent(p.Name, key) {
+			if w := kevWord(*e, p.Words); w != "" && !r.st.WasSent(p.Name, key) {
 				set.add(key, p.Name, w).kev = e
 			}
 		}
@@ -256,7 +252,7 @@ func (r *run) matchKEV(kev []feed.KEVEntry, profiles []Profile) []*alert {
 // matchNVD returns alerts for recent CRITICAL/HIGH CVEs. A CVE already sent,
 // or about to be sent, as KEV for a profile is not sent again as NVD. A
 // CVE.org failure holds back only the CVE that needed the lookup.
-func (r *run) matchNVD(cves []feed.CVE, profiles []Profile, kevAlerts []*alert) ([]*alert, error) {
+func (r *run) matchNVD(cves []CVE, profiles []Profile, kevAlerts []*alert) ([]*alert, error) {
 	pendingKEV := map[string]bool{}
 	for _, a := range kevAlerts {
 		for _, p := range a.profiles {
@@ -279,7 +275,7 @@ func (r *run) matchNVD(cves []feed.CVE, profiles []Profile, kevAlerts []*alert) 
 			if r.st.WasSent(p.Name, key) || r.st.WasSent(p.Name, kevKey) || pendingKEV[p.Name+" "+kevKey] {
 				continue
 			}
-			w, confirmed, err := match.NVD(r.ctx, *c, p.Words, r.lookup)
+			w, confirmed, err := nvdWord(r.ctx, *c, p.Words, r.lookup)
 			if err != nil {
 				cveOrgErr = err
 				continue
@@ -329,7 +325,7 @@ func (r *run) deliver(listTitle string, alerts []*alert) bool {
 		for i, a := range chunk {
 			lines[i] = a.short()
 		}
-		msg := notify.Message{
+		msg := Message{
 			Title:  fmt.Sprintf("%s: %d matches (part %d)", listTitle, len(alerts), part),
 			Body:   strings.Join(lines, "\n"),
 			Urgent: urgent,
@@ -375,7 +371,7 @@ func (r *run) markSent(a *alert) {
 
 // send delivers m to every channel. It reports success only if all of them
 // accepted it.
-func (r *run) send(m notify.Message) bool {
+func (r *run) send(m Message) bool {
 	d := Delivery{At: time.Now().UTC(), Message: m, OK: true}
 	if r.DryRun {
 		d.Results = []string{"dry run, not sent"}

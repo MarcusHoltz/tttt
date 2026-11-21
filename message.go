@@ -1,11 +1,9 @@
-package check
+package main
 
 import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/MarcusHoltz/message-me-cve/internal/notify"
 )
 
 // prefix names the profiles and watch words an alert is for:
@@ -13,10 +11,10 @@ import (
 func (a *alert) prefix() string   { return "[" + strings.Join(a.profiles, ", ") + "] " }
 func (a *alert) wordList() string { return strings.Join(a.words, ", ") }
 
-func (a *alert) message() notify.Message {
+func (a *alert) message() Message {
 	if a.kev != nil {
 		v := a.kev
-		return notify.Message{
+		return Message{
 			Title: fmt.Sprintf("%sACT NOW [%s]: exploited %s %s", a.prefix(), a.wordList(), v.Product, v.CveID),
 			Body: fmt.Sprintf("%s - %s %s\n%s\nActively exploited (on CISA KEV since %s). Ransomware use: %s\nAction: %s\n%s\n%s",
 				v.CveID, v.VendorProject, v.Product, v.VulnerabilityName, v.DateAdded,
@@ -34,7 +32,7 @@ func (a *alert) message() notify.Message {
 	if f := a.fixedIn(); f != "" {
 		fix = "Fixed in: " + cut(f, 400) + "\n"
 	}
-	return notify.Message{
+	return Message{
 		Title: fmt.Sprintf("%s%s %.1f [%s]: %s", a.prefix(), sev, score, a.wordList(), c.ID),
 		Body: fmt.Sprintf("%s - %s %.1f%s\n%s%s\n%s",
 			c.ID, sev, score, note, fix, cut(c.Description(), 500), nvdLink(c.ID)),

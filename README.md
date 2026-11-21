@@ -334,11 +334,14 @@ image is one static binary on `scratch`, running as UID 1000.
 
 ### Layout
 
-| Path | What |
+One binary, one `package main` at the repo root.
+
+| File | What |
 |---|---|
-| `cmd/message-me-cve` | Flags, wiring, run page output |
-| `internal/check` | One run: matching, alerts, delivery, failure tracking |
-| `internal/feed` | KEV, NVD and CVE.org clients |
-| `internal/match` | Watch lists and word matching |
-| `internal/notify` | Telegram and ntfy |
-| `internal/state` | State file |
+| `main.go` | Flags, wiring |
+| `github.go` | Run page output |
+| `check.go`, `message.go` | One run: matching, alerts, delivery, failure tracking |
+| `feed.go`, `feedtypes.go` | KEV, NVD and CVE.org clients |
+| `match.go` | Watch lists and word matching |
+| `notify.go` | Telegram and ntfy |
+| `state.go` | State file |

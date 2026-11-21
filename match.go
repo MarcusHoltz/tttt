@@ -1,17 +1,16 @@
-// Package match decides whether a feed entry concerns a watch list.
+// This file decides whether a feed entry concerns a watch list.
 //
 // Matching is on vendor and product names only, as whole words, never on
 // descriptions: "php" must not match every web app whose description
 // mentions a .php file.
-package match
+
+package main
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/MarcusHoltz/message-me-cve/internal/feed"
 )
 
 // LoadWords reads a watch list: one word or phrase per line, "#" starts a
@@ -68,19 +67,19 @@ func firstIn(hay string, words []string) string {
 	return ""
 }
 
-// KEV returns the watch word naming the entry's vendor or product, or "".
-func KEV(e feed.KEVEntry, words []string) string {
+// kevWord returns the watch word naming the entry's vendor or product, or "".
+func kevWord(e KEVEntry, words []string) string {
 	return firstIn(e.VendorProject+" "+e.Product, words)
 }
 
 // AffectedFunc returns the "vendor product" list of a CVE's CVE.org record.
 type AffectedFunc func(ctx context.Context, id string) ([]string, error)
 
-// NVD returns the watch word naming a vulnerable product of c, and whether
+// nvdWord returns the watch word naming a vulnerable product of c, and whether
 // the match comes from NVD's own analysis (confirmed). CVEs NVD has not
 // analyzed yet have no CPE list; for those whose description mentions a
 // watch word, the product list in the CVE.org record is checked instead.
-func NVD(ctx context.Context, c feed.CVE, words []string, affected AffectedFunc) (word string, confirmed bool, err error) {
+func nvdWord(ctx context.Context, c CVE, words []string, affected AffectedFunc) (word string, confirmed bool, err error) {
 	analyzed := false
 	for _, m := range c.CPEMatches() {
 		if !m.Vulnerable {

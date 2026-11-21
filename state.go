@@ -1,5 +1,6 @@
-// Package state persists what has been sent and what is broken, between runs.
-package state
+// This file persists what has been sent and what is broken, between runs.
+
+package main
 
 import (
 	"encoding/json"
@@ -22,8 +23,8 @@ type State struct {
 	Broken map[string]string `json:"broken"`
 }
 
-// Load reads the state file. A missing file is an empty state.
-func Load(path string) (*State, error) {
+// loadState reads the state file. A missing file is an empty state.
+func loadState(path string) (*State, error) {
 	st := &State{}
 	data, err := os.ReadFile(path)
 	switch {

@@ -7,13 +7,11 @@ import (
 	"os"
 	"strings"
 	"time"
-
-	"github.com/MarcusHoltz/message-me-cve/internal/check"
 )
 
 // reportToGitHub puts the run on its Actions page: an annotation per message
 // and a job summary with every message and a row per profile.
-func reportToGitHub(now time.Time, res *check.Result, log *slog.Logger) {
+func reportToGitHub(now time.Time, res *Result, log *slog.Logger) {
 	writeAnnotations(os.Stdout, res)
 	path := os.Getenv("GITHUB_STEP_SUMMARY")
 	if path == "" {
@@ -31,7 +29,7 @@ func reportToGitHub(now time.Time, res *check.Result, log *slog.Logger) {
 // writeAnnotations emits one workflow command per message. Feed text is
 // third-party, so it is escaped: a newline in it cannot start a forged
 // workflow command.
-func writeAnnotations(w io.Writer, res *check.Result) {
+func writeAnnotations(w io.Writer, res *Result) {
 	data := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A")
 	prop := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A", ":", "%3A", ",", "%2C")
 	for _, d := range res.Deliveries {
@@ -48,7 +46,7 @@ func writeAnnotations(w io.Writer, res *check.Result) {
 	}
 }
 
-func writeSummary(w io.Writer, now time.Time, res *check.Result) {
+func writeSummary(w io.Writer, now time.Time, res *Result) {
 	cell := strings.NewReplacer("|", `\|`, "\r", " ", "\n", " ")
 	nvd := "not due (polled under 2 h ago)"
 	if res.NVDPolled {

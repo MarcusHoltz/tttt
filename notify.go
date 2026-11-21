@@ -1,5 +1,6 @@
-// Package notify delivers messages to a phone: ntfy and Telegram.
-package notify
+// This file delivers messages to a phone: ntfy and Telegram.
+
+package main
 
 import (
 	"context"

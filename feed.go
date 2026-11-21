@@ -1,6 +1,7 @@
-// Package feed reads the public vulnerability feeds: CISA KEV, NVD and the
+// This file reads the public vulnerability feeds: CISA KEV, NVD and the
 // CVE.org record API.
-package feed
+
+package main
 
 import (
 	"context"
@@ -22,14 +23,14 @@ const (
 	nvdPageSize  = 2000
 )
 
-// Error is a feed that could not be read.
-type Error struct {
+// FeedError is a feed that could not be read.
+type FeedError struct {
 	Feed string
 	Err  error
 }
 
-func (e *Error) Error() string { return e.Feed + ": " + e.Err.Error() }
-func (e *Error) Unwrap() error { return e.Err }
+func (e *FeedError) Error() string { return e.Feed + ": " + e.Err.Error() }
+func (e *FeedError) Unwrap() error { return e.Err }
 
 // HTTPError is a response other than 200 OK.
 type HTTPError struct {
@@ -59,8 +60,9 @@ type Backoff struct {
 	Max    time.Duration
 }
 
-// Client fetches the feeds. The zero value is not usable; use NewClient.
-type Client struct {
+// FeedClient fetches the feeds. The zero value is not usable; use
+// NewFeedClient.
+type FeedClient struct {
 	HTTP      *http.Client
 	UserAgent string
 	NVDKey    string
@@ -75,13 +77,13 @@ type Client struct {
 	CVEOrgURL string // record URL is CVEOrgURL + "/" + id
 }
 
-// NewClient returns a Client for the public endpoints.
-func NewClient(nvdKey string, log *slog.Logger) *Client {
+// NewFeedClient returns a FeedClient for the public endpoints.
+func NewFeedClient(nvdKey string, log *slog.Logger) *FeedClient {
 	delay := 7 * time.Second
 	if nvdKey != "" {
 		delay = 700 * time.Millisecond
 	}
-	return &Client{
+	return &FeedClient{
 		HTTP:         &http.Client{Timeout: 60 * time.Second},
 		UserAgent:    "message-me-cve (+https://github.com/MarcusHoltz/message-me-cve)",
 		NVDKey:       nvdKey,
@@ -100,7 +102,7 @@ func NewClient(nvdKey string, log *slog.Logger) *Client {
 
 // KEV returns the CISA Known Exploited Vulnerabilities catalog, from the
 // first URL that serves a non-empty one.
-func (c *Client) KEV(ctx context.Context) ([]KEVEntry, error) {
+func (c *FeedClient) KEV(ctx context.Context) ([]KEVEntry, error) {
 	var errs []error
 	for _, u := range c.KEVURLs {
 		var catalog struct {
@@ -116,14 +118,14 @@ func (c *Client) KEV(ctx context.Context) ([]KEVEntry, error) {
 		}
 		return catalog.Vulnerabilities, nil
 	}
-	return nil, &Error{"CISA KEV", errors.Join(errs...)}
+	return nil, &FeedError{"CISA KEV", errors.Join(errs...)}
 }
 
 // NVD returns every CVE NVD modified in [start, end], fetched in windows of
 // at most 119 days so a long gap leaves no hole. Severity is not filtered
 // here: NVD's cvssV3Severity filter only sees NVD's own score and would drop
 // CVEs that only their publisher has scored.
-func (c *Client) NVD(ctx context.Context, start, end time.Time) ([]CVE, error) {
+func (c *FeedClient) NVD(ctx context.Context, start, end time.Time) ([]CVE, error) {
 	var out []CVE
 	first := true
 	for from := start; from.Before(end); from = from.Add(nvdMaxWindow) {
@@ -134,13 +136,13 @@ func (c *Client) NVD(ctx context.Context, start, end time.Time) ([]CVE, error) {
 		for index := 0; ; {
 			if !first {
 				if err := sleep(ctx, c.NVDPageDelay); err != nil {
-					return nil, &Error{"NVD", err}
+					return nil, &FeedError{"NVD", err}
 				}
 			}
 			first = false
 			page, err := c.nvdPage(ctx, from, to, index)
 			if err != nil {
-				return nil, &Error{"NVD", fmt.Errorf("startIndex=%d: %w", index, err)}
+				return nil, &FeedError{"NVD", fmt.Errorf("startIndex=%d: %w", index, err)}
 			}
 			for _, v := range page.Vulnerabilities {
 				out = append(out, v.CVE)
@@ -161,7 +163,7 @@ type nvdPage struct {
 	} `json:"vulnerabilities"`
 }
 
-func (c *Client) nvdPage(ctx context.Context, from, to time.Time, index int) (*nvdPage, error) {
+func (c *FeedClient) nvdPage(ctx context.Context, from, to time.Time, index int) (*nvdPage, error) {
 	q := url.Values{
 		"lastModStartDate": {from.UTC().Format(nvdTimeFormat)},
 		"lastModEndDate":   {to.UTC().Format(nvdTimeFormat)},
@@ -182,7 +184,7 @@ func (c *Client) nvdPage(ctx context.Context, from, to time.Time, index int) (*n
 
 // retry runs fn with exponential backoff until it succeeds, fails for good,
 // the budget is spent or ctx is done.
-func (c *Client) retry(ctx context.Context, fn func() error) error {
+func (c *FeedClient) retry(ctx context.Context, fn func() error) error {
 	deadline := time.Now().Add(c.NVDRetry.Budget)
 	wait := c.NVDRetry.First
 	for {
@@ -203,7 +205,7 @@ func (c *Client) retry(ctx context.Context, fn func() error) error {
 // Affected returns "vendor product" for each product listed in the CVE.org
 // record. The CVE's publisher writes this list at release, often days before
 // NVD analyzes the CVE.
-func (c *Client) Affected(ctx context.Context, id string) ([]string, error) {
+func (c *FeedClient) Affected(ctx context.Context, id string) ([]string, error) {
 	var rec struct {
 		Containers struct {
 			CNA struct {
@@ -215,7 +217,7 @@ func (c *Client) Affected(ctx context.Context, id string) ([]string, error) {
 		} `json:"containers"`
 	}
 	if err := c.getJSON(ctx, c.CVEOrgURL+"/"+url.PathEscape(id), nil, &rec); err != nil {
-		return nil, &Error{"CVE.org", err}
+		return nil, &FeedError{"CVE.org", err}
 	}
 	out := make([]string, 0, len(rec.Containers.CNA.Affected))
 	for _, a := range rec.Containers.CNA.Affected {
@@ -224,7 +226,7 @@ func (c *Client) Affected(ctx context.Context, id string) ([]string, error) {
 	return out, nil
 }
 
-func (c *Client) getJSON(ctx context.Context, u string, headers map[string]string, v any) error {
+func (c *FeedClient) getJSON(ctx context.Context, u string, headers map[string]string, v any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err

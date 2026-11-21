@@ -17,12 +17,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/MarcusHoltz/message-me-cve/internal/check"
-	"github.com/MarcusHoltz/message-me-cve/internal/feed"
-	"github.com/MarcusHoltz/message-me-cve/internal/match"
-	"github.com/MarcusHoltz/message-me-cve/internal/notify"
-	"github.com/MarcusHoltz/message-me-cve/internal/state"
 )
 
 const (
@@ -31,9 +25,9 @@ const (
 	exitUsage  = 2 // bad configuration; nothing ran
 )
 
-func main() { os.Exit(run()) }
+func main() { os.Exit(runMain()) }
 
-func run() int {
+func runMain() int {
 	profilesDir := flag.String("profiles", "profiles", "directory of <name>.txt watch lists")
 	statePath := flag.String("state", "state/state.json", "state file")
 	dryRun := flag.Bool("dry-run", false, "print alerts instead of sending them; do not write state")
@@ -61,7 +55,7 @@ func run() int {
 	// state to remember that this was already reported: message every run.
 	fail := func(err error) int {
 		log.Error("not covered", "err", err)
-		msg := notify.Message{Title: "message-me-cve: FAILED, you are not covered", Body: err.Error(), Urgent: true}
+		msg := Message{Title: "message-me-cve: FAILED, you are not covered", Body: err.Error(), Urgent: true}
 		if *dryRun {
 			return exitBroken
 		}
@@ -76,13 +70,13 @@ func run() int {
 	if err != nil {
 		return fail(err)
 	}
-	st, err := state.Load(*statePath)
+	st, err := loadState(*statePath)
 	if err != nil {
 		return fail(fmt.Errorf("cannot read state: %w", err))
 	}
 
-	c := &check.Checker{
-		Feeds:   feed.NewClient(strings.TrimSpace(os.Getenv("NVD_API_KEY")), log),
+	c := &Checker{
+		Feeds:   NewFeedClient(strings.TrimSpace(os.Getenv("NVD_API_KEY")), log),
 		Senders: senders,
 		DryRun:  *dryRun,
 		Log:     log,
@@ -112,17 +106,17 @@ func run() int {
 	return exitOK
 }
 
-func sendersFromEnv() ([]notify.Sender, error) {
+func sendersFromEnv() ([]Sender, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
-	var out []notify.Sender
+	var out []Sender
 	if u := strings.TrimSpace(os.Getenv("NTFY_URL")); u != "" {
-		out = append(out, &notify.Ntfy{URL: u, HTTP: client})
+		out = append(out, &Ntfy{URL: u, HTTP: client})
 	}
 	token := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN"))
 	chat := strings.TrimSpace(os.Getenv("TELEGRAM_CHAT_ID"))
 	switch {
 	case token != "" && chat != "":
-		out = append(out, &notify.Telegram{Token: token, ChatID: chat,
+		out = append(out, &Telegram{Token: token, ChatID: chat,
 			API: "https://api.telegram.org", HTTP: client, Gap: time.Second})
 	case token != "" || chat != "":
 		return nil, errors.New("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set together")
@@ -132,21 +126,21 @@ func sendersFromEnv() ([]notify.Sender, error) {
 
 // loadProfiles reads every <dir>/<name>.txt as profile name. A list that
 // cannot be read is returned with Err set, so the others are still checked.
-func loadProfiles(dir string) ([]check.Profile, error) {
+func loadProfiles(dir string) ([]Profile, error) {
 	paths, err := filepath.Glob(filepath.Join(dir, "*.txt"))
 	if err != nil || len(paths) == 0 {
 		return nil, fmt.Errorf("no watch lists (*.txt) in %s", dir)
 	}
-	var out []check.Profile
+	var out []Profile
 	for _, p := range paths {
-		words, err := match.LoadWords(p)
-		out = append(out, check.Profile{Name: strings.TrimSuffix(filepath.Base(p), ".txt"), Words: words, Err: err})
+		words, err := LoadWords(p)
+		out = append(out, Profile{Name: strings.TrimSuffix(filepath.Base(p), ".txt"), Words: words, Err: err})
 	}
 	return out, nil
 }
 
-func sendTest(ctx context.Context, log *slog.Logger, senders []notify.Sender) int {
-	msg := notify.Message{Title: "message-me-cve: test", Body: "Delivery works. Sent with -test-notify."}
+func sendTest(ctx context.Context, log *slog.Logger, senders []Sender) int {
+	msg := Message{Title: "message-me-cve: test", Body: "Delivery works. Sent with -test-notify."}
 	code := exitOK
 	for _, s := range senders {
 		if err := s.Send(ctx, msg); err != nil {
