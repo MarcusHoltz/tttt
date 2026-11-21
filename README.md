@@ -272,8 +272,8 @@ Manual runs started every time, within seconds.
   `Fixed in` versions when NVD gives them.
 - **Latency is the schedule's.** A new CVE waits up to the gap between two
   runs.
-- **No CI.** The next run uses whatever is on `main`. Run the tests
-  ([Develop](#develop)) before pushing code.
+- **No CI, no tests.** The next run uses whatever is on `main`. A code
+  mistake shows as a red run.
 
 
 * * *
@@ -316,12 +316,6 @@ docker compose run --rm message-me-cve
 
 Reads `profiles/`, writes `state/state.json`, secrets from `.env`. The
 image is one static binary on `scratch`, running as UID 1000.
-
-### Develop
-
-```bash
-docker run --rm -v "$PWD":/src -w /src golang:1.27 go test -race ./...
-```
 
 ### Layout
 
