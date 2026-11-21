@@ -10,16 +10,16 @@
 </p>
 
 <p align="center">
-  <img src="https://github.com/MarcusHoltz/message-me-cve/actions/workflows/message-me-cve.yml/badge.svg" alt="Check status">
-  <img src="https://github.com/MarcusHoltz/message-me-cve/actions/workflows/ci.yml/badge.svg" alt="CI status">
+  <img src="https://github.com/MarcusHoltz/tttt/actions/workflows/message-me-cve.yml/badge.svg" alt="Check status">
+  <img src="https://github.com/MarcusHoltz/tttt/actions/workflows/ci.yml/badge.svg" alt="CI status">
 </p>
 
 
 ## Overview
 
 Each project gets a watch list, one product per line: `php`, `nginx`,
-`wordpress`. Twice a day, an outside cron service starts a GitHub Actions
-run that checks the lists against:
+`wordpress`. At the times you set, an outside cron service starts a GitHub
+Actions run that checks the lists against:
 
 - **[CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)**:
   vulnerabilities exploited in the wild. Sent as `ACT NOW`, urgent.
@@ -67,6 +67,15 @@ Check delivery without waiting for a CVE:
 NTFY_URL=https://ntfy.sh/<topic> go run ./cmd/message-me-cve -test-notify
 ```
 
+From Actions, with the repo's own secrets:
+
+1. Push a branch whose `message-me-cve.yml` runs
+   `go run ./cmd/message-me-cve -test-notify` in place of the check
+   command. `main` stays unchanged.
+2. **Actions > message-me-cve > Run workflow**, pick that branch.
+3. The log shows `test message delivered channel=telegram` (or `ntfy`),
+   and the phone shows `message-me-cve: test`. Delete the branch.
+
 ### Phone
 
 - **ntfy**: install the [ntfy](https://ntfy.sh/) app, subscribe to a long
@@ -99,25 +108,54 @@ account, Nov 19-21 2026, it started 4 runs from 60+ scheduled times.
 Manual runs (`workflow_dispatch`) started every time, within seconds. An
 outside cron service calls the API a manual run uses.
 
-1. **GitHub > Settings > Developer settings > Fine-grained tokens >
-   Generate new token.** Repository access: only this repo. Permissions:
-   **Actions: Read and write**. Nothing else.
-2. [cron-job.org](https://cron-job.org/) (free), create one job:
-   - URL:
-     `https://api.github.com/repos/<owner>/<repo>/actions/workflows/message-me-cve.yml/dispatches`
-   - Schedule: the two times a day you want alerts.
-   - Advanced: request method `POST`, body `{"ref":"main"}`, headers:
-     - `Authorization: Bearer <token>`
-     - `Accept: application/vnd.github+json`
-     - `X-GitHub-Api-Version: 2026-03-10`
-   - Turn on its email notification for failed jobs.
-3. Check: the job's history shows a 2xx status, and a new run appears
-   under **Actions > message-me-cve**.
+Set up and verified 2026-11-21:
 
-- Any cron that can send this POST works (`curl` from a server, Uptime
-  Kuma, and so on).
-- When the token expires, GitHub rejects the call: cron-job.org emails
-  you and the heartbeat stops.
+1. **GitHub > Settings > Developer settings > Personal access tokens >
+   Fine-grained tokens > Generate new token.** Repository access: only this repo. Permissions:
+   **Actions: Read and write**. Nothing else. Note its expiry date.
+2. [cron-job.org](https://cron-job.org/) (free), create one job.
+   - **Common** tab:
+     - URL:
+       `https://api.github.com/repos/MarcusHoltz/tttt/actions/workflows/message-me-cve.yml/dispatches`
+     - Execution schedule: **Custom**, for example `0 6,14 * * *` for
+       06:00 and 14:00. "Every day at" runs once a day.
+   - **Advanced** tab:
+     - Headers, three rows, key and value in separate fields:
+
+       | Key | Value |
+       |---|---|
+       | `Authorization` | `Bearer <token>` (the word Bearer, one space, the token) |
+       | `Accept` | `application/vnd.github+json` |
+       | `X-GitHub-Api-Version` | `2026-03-10` |
+
+     - Time zone: yours (here `America/Denver`). The schedule uses it.
+     - Request method `POST`. Request body `{"ref":"main"}`.
+     - Ignore the "Sending JSON data?" Content-Type suggestion: GitHub
+       accepts the body without it.
+   - **Notifications** tab: email on failure.
+3. **TEST RUN**, then **SAVE**. Changes not saved are not used by the
+   scheduled calls.
+
+A working call returns `200` with the new run in the body:
+
+```json
+{"workflow_run_id":44918328720,"run_url":"...","html_url":"https://github.com/MarcusHoltz/tttt/actions/runs/44918328720"}
+```
+
+The run appears under **Actions > message-me-cve** at once. GitHub's reply
+on failure, in the response body:
+
+| Status | Body | Cause |
+|---|---|---|
+| `401` | `Requires authentication` | No `Authorization` row, or its value lacks the `Bearer ` prefix |
+| `401` | `Bad credentials` | Token value wrong (typo, cut off, extra characters) |
+| `404` | `Not Found` | URL wrong: owner, repo or workflow file name |
+| `422` | `No ref found for: ...` | Body names a branch that does not exist |
+
+- Any cron that can send this POST works, for example `curl` from a
+  server's crontab.
+- When the token expires, the calls fail and cron-job.org emails you.
+  Make a new token and replace the `Authorization` value.
 - Turn off: pause the cron job, or **Actions > message-me-cve > ... >
   Disable workflow**.
 
@@ -166,7 +204,7 @@ result per channel.
 | Decision | Why |
 |---|---|
 | NVD at most every 2 h, enforced in code | NVD asks API clients to poll for changes no more than once every two hours. Manual runs count too, so a cron interval alone cannot enforce it. |
-| Correctness does not depend on the schedule | GitHub starts scheduled runs late or drops them under load, and new repos can go days before their first scheduled run. KEV is read in full every run; NVD reads from a cursor. A late run only delays alerts. |
+| Correctness does not depend on the schedule | A run can start late or not at all (cron service down, token expired). KEV is read in full every run; NVD reads from a cursor. A late or missed run only delays alerts. |
 | Marked sent only after delivery | A failed push is retried next run instead of lost. |
 | NVD cursor moves only when all of it was handled | NVD down, CVE.org down for a CVE, or an undelivered NVD alert: the next poll re-reads the same changes. |
 | Failures messaged once, recovery once | A feed down for a day is two messages, not 24. The run stays red while it lasts. |
@@ -188,8 +226,8 @@ result per channel.
   alerts list `Fixed in` versions when NVD gives them.
 - **Word matching is name matching.** NVD files every PyPI package under
   vendor `python`; write `python python` to mean CPython only.
-- **Latency is the schedule's.** Two runs a day: a new CVE waits up to
-  the gap between the two runs.
+- **Latency is the schedule's.** A new CVE waits up to the gap between
+  two runs.
 - **The workflow file is not gated.** The outside cron dispatches on
   `main`, so GitHub runs the workflow file from `main`: a change to
   `message-me-cve.yml` applies at the next run without CI. Code and watch
@@ -261,7 +299,8 @@ docker run --rm -v "$PWD":/src -w /src golang:1.27 sh -c \
    go tool -modfile=tools/go.mod govulncheck ./...'
 ```
 
-CI (`.github/workflows/ci.yml`), on pushes to `main`, PRs, and weekly:
+CI (`.github/workflows/ci.yml`), on pushes to `main`, PRs, and weekly
+(the weekly run uses GitHub's cron, which can drop it):
 
 - `test`: gofmt, `go vet`, staticcheck, `go test -race`, govulncheck.
 - `image`: builds the Dockerfile and runs it once with `-dry-run`.
