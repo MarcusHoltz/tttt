@@ -6,14 +6,14 @@ Tell it what software your projects run. When a serious CVE shows up for one of 
 ![message-me-cve header banner: NVD and CISA KEV notifications per project, sent from GitHub Actions](https://raw.githubusercontent.com/MarcusHoltz/marcusholtz.github.io/refs/heads/main/assets/img/header/header--cvenotify--nvd-notification-per-project-github.jpg "CISA KEV and NVD alerts per project, to Telegram or ntfy")
 
 
-![Check status](https://github.com/MarcusHoltz/message-me-cve/actions/workflows/message-me-cve.yml/badge.svg)
+![Check status](https://github.com/OWNER/REPO/actions/workflows/message-me-cve.yml/badge.svg)
 
 
 * * *
 
 ## What does message-me-cve do?
 
-I have a handful of projects, and each one is built on a different pile of software. I wanted to know when one of those pieces gets a bad CVE, without reading vulnerability feeds every morning.
+Say you run a handful of projects, and each one is built on a different pile of software. You want to know when one of those pieces gets a bad CVE, without reading vulnerability feeds every morning.
 
 So each project gets a watch list. A watch list is a text file with one product per line: `php`, `nginx`, `openssl`.
 
@@ -37,10 +37,10 @@ When the run is started, a GitHub Actions job checks every watch list against th
 
 ### What lands on your phone
 
-A KEV match, taken from a dry run of the watch lists in this repo:
+A KEV match, taken from a dry run with two watch lists, `shop.txt` and `blog.txt`, that both list `openssl`:
 
 ```text
-[i2p-party-line, party-line-pager, tor-party-line] ACT NOW [openssl]: exploited OpenSSL CVE-2014-0160
+[blog, shop] ACT NOW [openssl]: exploited OpenSSL CVE-2014-0160
 ```
 
 The first brackets are the projects it matched. The second brackets are the watch words that matched.
@@ -68,7 +68,7 @@ message-me-cve: NVD OK again
 > [!IMPORTANT]
 > Your watch lists, and every run page, show what your servers run. Use a private repo for real infrastructure.
 
-- **Don't fork this repo.** A fork of a public repo is always public, and you can't change that. Make an empty private repo and push a clone of this one into it (step 1 below).
+- **Use the template, don't fork.** A fork of a public repo is always public, and you can't change that. A repo made from the template starts with a single commit, and you pick its visibility (step 1 below).
 
 - **Actions minutes.** A private repo uses up your plan's included Actions usage. Public repos on GitHub's standard runners are free. A normal run takes under a minute.
 
@@ -77,16 +77,15 @@ message-me-cve: NVD OK again
 
 ## Setup
 
-### 1. Push this repo to your own repo
+### 1. Make your own repo from the template
 
-`main` goes first:
+**Use this template > Create a new repository**
 
-```bash
-git clone https://github.com/MarcusHoltz/message-me-cve.git
-cd message-me-cve
-git remote set-url origin https://github.com/<owner>/<repo>.git
-git push -u origin main
-```
+- **Owner** and **Repository name:** yours.
+
+- **Visibility:** **Private** for real infrastructure.
+
+- **Include all branches:** leave it unchecked. You only need `main`, and you make your own `state` branch in step 3.
 
 
 * * *
@@ -109,6 +108,7 @@ In your repo, go to **Settings > Secrets and variables > Actions**. You need at 
 This only needs to happen once. The `state` branch is where the run remembers what it already sent.
 
 ```bash
+git clone https://github.com/<owner>/<repo>.git && cd <repo>
 git switch --orphan state && git commit --allow-empty -m state
 git push -u origin state && git switch main
 ```
@@ -118,7 +118,7 @@ git push -u origin state && git switch main
 
 ### 4. Write your watch lists
 
-One file per project: `profiles/<project>.txt`. The lists in `profiles/` right now are mine, replace them with yours. See [Writing watch lists](#writing-watch-lists).
+One file per project: `profiles/<project>.txt`. The lists in `profiles/` are examples, replace them with yours. See [Writing watch lists](#writing-watch-lists).
 
 Push to `main`. The next run uses them.
 
@@ -151,11 +151,7 @@ The workflow has no `schedule:` trigger. An outside cron service starts it throu
 
 GitHub's docs say it themselves: the `schedule` event "can be delayed during periods of high loads of GitHub Actions workflow runs", and "if the load is sufficiently high enough, some queued jobs may be dropped."
 
-I tried it anyway. An hourly cron, 12:00 to 22:00 UTC. Between Nov 19 20:41 and Nov 21 19:41 UTC 2026, that's 22 scheduled times. GitHub started 4 runs. Two of those started hours after the last slot of the day.
-
-Others are seeing the same thing: [community #207346](https://github.com/orgs/community/discussions/207346), [community #210932](https://github.com/orgs/community/discussions/210932).
-
-Runs started through the API showed up every time, within seconds.
+People are running into it: [community #207346](https://github.com/orgs/community/discussions/207346), [community #210932](https://github.com/orgs/community/discussions/210932).
 
 
 * * *
@@ -216,8 +212,8 @@ Hit **Test run**, then **Save**. Changes that aren't saved aren't used.
 
 A working call comes back `200` with the new run:
 
-```json
-{"workflow_run_id":44918328720,"run_url":"...","html_url":"https://github.com/<owner>/<repo>/actions/runs/44918328720"}
+```text
+{"workflow_run_id":<run id>,"run_url":"...","html_url":"https://github.com/<owner>/<repo>/actions/runs/<run id>"}
 ```
 
 > Leave out the `X-GitHub-Api-Version` header and GitHub falls back to API version `2022-11-28`. That version answers `204` with an empty body. The run still starts, you just don't get the run details back.
