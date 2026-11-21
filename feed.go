@@ -92,7 +92,7 @@ func NewFeedClient(nvdKey string, log *slog.Logger) *FeedClient {
 		NVDRetry: Backoff{Budget: 60 * time.Minute, First: 30 * time.Second, Max: 5 * time.Minute},
 		Log:      log,
 		KEVURLs: []string{
-			"https://raw.githubusercontent.com/cisagov/kev-data/main/known_exploited_vulnerabilities.json",
+			"https://raw.githubusercontent.com/cisagov/kev-data/develop/known_exploited_vulnerabilities.json",
 			"https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
 		},
 		NVDURL:    "https://services.nvd.nist.gov/rest/json/cves/2.0",
