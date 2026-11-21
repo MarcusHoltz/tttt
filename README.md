@@ -15,7 +15,6 @@
 
 <p align="center">
   <img src="https://github.com/MarcusHoltz/tttt/actions/workflows/message-me-cve.yml/badge.svg" alt="Check status">
-  <img src="https://github.com/MarcusHoltz/tttt/actions/workflows/ci.yml/badge.svg" alt="CI status">
 </p>
 
 <p align="center">
@@ -72,7 +71,6 @@ No message means nothing new matched. Failures are messaged too.
    | `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` | Telegram, set both. See [Phone](#-phone) |
    | `NTFY_URL` | ntfy, `https://ntfy.sh/<topic>` |
    | `NVD_API_KEY` | Optional, [free](https://nvd.nist.gov/developers/request-an-api-key). Faster NVD paging |
-   | `HEARTBEAT_URL` | Optional, see [Heartbeat](#heartbeat) |
 
 3. 🌿 **Create the state branch** once:
 
@@ -82,8 +80,7 @@ No message means nothing new matched. Failures are messaged too.
    ```
 
 4. 📝 **Write the watch lists**, one per project, in `profiles/<name>.txt`.
-   Push to `main`. CI tests the commit and promotes it to `live`, the
-   branch the check runs.
+   Push to `main`. The next run uses them.
 5. ▶️ **Run it once**: **Actions > message-me-cve > Run workflow**. Green
    means configuration, feeds and state work. Delivery is only tested when
    something is sent: send a [test message](#-phone).
@@ -195,17 +192,6 @@ Send a test message, with the secrets in `.env`:
 docker compose run --rm message-me-cve -test-notify
 ```
 
-### Heartbeat
-
-Optional. A check that does not run cannot report it: silence looks the
-same as "no new CVEs". An outside monitor that alerts when pings stop
-covers this.
-
-- [healthchecks.io](https://healthchecks.io/) (free): period 12 hours,
-  grace 2 hours (a run takes up to 80 minutes when NVD retries). Its ping
-  URL is `HEARTBEAT_URL`.
-- Pinged after a run that saved its state and delivered every message.
-
 
 * * *
 
@@ -240,8 +226,8 @@ are retried on the next run.
 
 ## 🧠 How it works
 
-1. Check out `live`, the last commit that passed CI. Read every
-   `profiles/*.txt`, and `state.json` from the `state` branch.
+1. Check out `main`. Read every `profiles/*.txt`, and `state.json` from
+   the `state` branch.
 2. Fetch the KEV catalog (GitHub mirror, then cisa.gov).
 3. If NVD was last polled 2 hours ago or more: fetch every CVE NVD changed
    since the cursor.
@@ -250,9 +236,7 @@ are retried on the next run.
 5. Send. Mark each alert sent, per profile, only after every channel
    accepted it.
 6. Move the NVD cursor to now only if everything from NVD was handled.
-7. Ping `HEARTBEAT_URL` if set, `state.json` was written and every
-   message was delivered.
-8. Commit `state.json` to the `state` branch. Exit 1 if anything is
+7. Commit `state.json` to the `state` branch. Exit 1 if anything is
    failing.
 
 ### Design decisions
@@ -264,10 +248,9 @@ are retried on the next run.
 | Marked sent only after delivery | A failed send is retried next run, not lost. |
 | Failures messaged once, recovery once | A feed down for a day is two messages, not one per run. The run stays red while it lasts. |
 | Highest CVSS from any source | NVD often scores new CVEs weeks late. The publisher's score arrives with the CVE. 3.x first, 4.0 if no 3.x. |
-| The check runs `live`, not `main` | CI promotes a commit only after gofmt, vet, staticcheck, tests, govulncheck and an image smoke test pass. A broken push never runs. |
 | State on its own branch | `main` holds code only. One run at a time, so no merge conflicts. |
 | No write token in the check step | The step that parses third-party feed data cannot read the token. Only the step that pushes state gets it. |
-| Pinned, updated by Dependabot | Actions by commit SHA, the base image by digest, tools in `tools/go.mod` with checksums. |
+| Pinned | Actions by commit SHA, the base image by digest. Updated by hand. |
 
 ### Why not GitHub's cron
 
@@ -289,9 +272,8 @@ Manual runs started every time, within seconds.
   `Fixed in` versions when NVD gives them.
 - **Latency is the schedule's.** A new CVE waits up to the gap between two
   runs.
-- **The workflow file is not gated.** Runs start on `main`, so a change to
-  `message-me-cve.yml` applies at the next run without CI. Code and watch
-  lists go through `live`.
+- **No CI.** The next run uses whatever is on `main`. Run the tests
+  ([Develop](#develop)) before pushing code.
 
 
 * * *
@@ -313,7 +295,6 @@ Manual runs started every time, within seconds.
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram bot and chat, set together |
 | `NTFY_URL` | ntfy topic URL |
 | `NVD_API_KEY` | Optional. NVD allows 50 requests per 30 s with it, 5 without |
-| `HEARTBEAT_URL` | Optional. GET after every fully delivered run |
 
 Exit codes: `0` all OK, `1` something is failing (and was messaged), `2`
 bad configuration (nothing ran).
@@ -340,21 +321,7 @@ image is one static binary on `scratch`, running as UID 1000.
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src golang:1.27 go test -race ./...
-docker run --rm -v "$PWD":/src -w /src golang:1.27 sh -c \
-  'go tool -modfile=tools/go.mod staticcheck ./... &&
-   go tool -modfile=tools/go.mod govulncheck ./...'
 ```
-
-CI (`.github/workflows/ci.yml`) runs on pushes to `main`, PRs, and weekly
-(the weekly run uses GitHub's cron, which can drop it):
-
-- `test`: gofmt, `go vet`, staticcheck, `go test -race`, govulncheck.
-- `image`: builds the Dockerfile and runs it once with `-dry-run`.
-- `promote`, pushes to `main` only, after both pass: pushes the commit to
-  `live`.
-
-Roll back by pointing `live` at an older commit:
-`git push -f origin <commit>:live`.
 
 ### Layout
 
@@ -366,4 +333,3 @@ Roll back by pointing `live` at an older commit:
 | `internal/match` | Watch lists and word matching |
 | `internal/notify` | Telegram and ntfy |
 | `internal/state` | State file |
-| `tools` | Pinned staticcheck and govulncheck |
