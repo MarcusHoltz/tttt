@@ -61,8 +61,22 @@ No message means nothing new matched. Failures are messaged too.
 > [!IMPORTANT]
 > Watch lists and run pages show what your servers run. Use a private
 > repo for real infrastructure.
+>
+> - Do not fork: a fork of a public repo is always public. Create an
+>   empty private repo and push a clone of this one (step 1).
+> - Actions minutes in a private repo count against your plan's included
+>   usage. Public repos are free. Two runs a day is about 60 minutes a
+>   month.
 
-1. 🏗️ **Push this repo to GitHub**, `main` first.
+1. 🏗️ **Push this repo to your own GitHub repo**, `main` first:
+
+   ```bash
+   git clone https://github.com/MarcusHoltz/tttt.git message-me-cve
+   cd message-me-cve
+   git remote set-url origin https://github.com/<owner>/<repo>.git
+   git push -u origin main
+   ```
+
 2. 🔑 **Add secrets** in **Settings > Secrets and variables > Actions**.
    At least one channel:
 
@@ -101,7 +115,8 @@ cron (`schedule:`) is not used: it drops runs. See
 **GitHub > Settings > Developer settings > Personal access tokens >
 Fine-grained tokens > Generate new token**
 
-- Repository access: only this repo.
+- Repository access: only this repo. A private repo must be selected
+  here, or every call returns `404`.
 - Permissions: **Actions: Read and write**. Nothing else.
 - Note the expiry date. When it passes, runs stop.
 
@@ -111,8 +126,8 @@ Fine-grained tokens > Generate new token**
 
 **Common** tab:
 
-- URL:
-  `https://api.github.com/repos/MarcusHoltz/tttt/actions/workflows/message-me-cve.yml/dispatches`
+- URL, with your owner and repo name. Same for public and private repos:
+  `https://api.github.com/repos/<owner>/<repo>/actions/workflows/message-me-cve.yml/dispatches`
 - Execution schedule: **Custom**, for example `0 6,14 * * *` for 06:00
   and 14:00. "Every day at" runs once a day.
 
@@ -140,7 +155,7 @@ Fine-grained tokens > Generate new token**
 A working call returns `200` and the new run:
 
 ```json
-{"workflow_run_id":44918328720,"run_url":"...","html_url":"https://github.com/MarcusHoltz/tttt/actions/runs/44918328720"}
+{"workflow_run_id":44918328720,"run_url":"...","html_url":"https://github.com/<owner>/<repo>/actions/runs/44918328720"}
 ```
 
 The run shows up under **Actions > message-me-cve** at once. Anything else:
@@ -206,7 +221,7 @@ GitHub's reply is in the response body:
 |---|---|---|
 | `401` | `Requires authentication` | Add the `Authorization` row; its value needs the `Bearer ` prefix |
 | `401` | `Bad credentials` | Token value wrong (typo, cut off, extra characters). Paste it again |
-| `404` | `Not Found` | URL wrong: owner, repo or workflow file name |
+| `404` | `Not Found` | URL wrong: owner, repo or workflow file name. Private repo: also the token has no access to it. GitHub answers `404`, not `403`, so it does not reveal the repo exists |
 | `422` | `No ref found for: ...` | Request body names a branch that does not exist |
 
 ### No message after a run
