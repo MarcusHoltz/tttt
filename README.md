@@ -18,7 +18,8 @@
 ## Overview
 
 Each project gets a watch list, one product per line: `php`, `nginx`,
-`wordpress`. Twice a day, GitHub Actions checks the lists against:
+`wordpress`. Twice a day, an outside cron service starts a GitHub Actions
+run that checks the lists against:
 
 - **[CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)**:
   vulnerabilities exploited in the wild. Sent as `ACT NOW`, urgent.
@@ -58,7 +59,7 @@ message-me-cve: NVD OK again
    push to `main`. CI tests the commit and, if it passes, pushes it to the
    `live` branch. The check runs `live`.
 5. When CI is green, **Actions > message-me-cve > Run workflow** to check
-   the setup. After that it runs twice a day, see [Schedule](#schedule).
+   the setup. Then set up the outside cron, see [Schedule](#schedule).
 
 Check delivery without waiting for a CVE:
 
@@ -78,39 +79,47 @@ NTFY_URL=https://ntfy.sh/<topic> go run ./cmd/message-me-cve -test-notify
 ### Heartbeat
 
 The check cannot tell you that it stopped running, and silence looks the
-same as "no new CVEs". GitHub also disables scheduled workflows in public
-repos after 60 days without repository activity. An outside monitor that
-alerts when pings stop covers this:
+same as "no new CVEs". An outside monitor that alerts when pings stop
+covers this:
 
 - [healthchecks.io](https://healthchecks.io/) (free): create a check with
-  period 12 hours, grace 9 hours (GitHub starts scheduled runs late). Its
-  ping URL is `HEARTBEAT_URL`. Any monitor that waits for an HTTP GET
-  works, for example an Uptime Kuma push monitor.
+  period 12 hours, grace 2 hours (a run can take up to 80 minutes when
+  NVD retries). Its ping URL is `HEARTBEAT_URL`. Any monitor that waits
+  for an HTTP GET works, for example an Uptime Kuma push monitor.
 - Pinged after a run that saved its state and delivered every message.
   Problems that were already messaged do not stop it.
-- Stops when: the workflow is disabled or not scheduled, the
-  configuration is broken, or a message cannot reach your phone.
+- Stops when: the workflow is disabled, the outside cron stops calling it
+  or its token expired, the configuration is broken, or a message cannot
+  reach your phone.
 
 ### Schedule
 
-The cron line in `.github/workflows/message-me-cve.yml`, in UTC:
+GitHub's own cron (`schedule:`) is not used: it dropped runs. On this
+account, Nov 19-21 2026, it started 4 runs from 60+ scheduled times.
+Manual runs (`workflow_dispatch`) started every time, within seconds. An
+outside cron service calls the API a manual run uses.
 
-```yaml
-- cron: '41 7,15 * * *'
-```
+1. **GitHub > Settings > Developer settings > Fine-grained tokens >
+   Generate new token.** Repository access: only this repo. Permissions:
+   **Actions: Read and write**. Nothing else.
+2. [cron-job.org](https://cron-job.org/) (free), create one job:
+   - URL:
+     `https://api.github.com/repos/<owner>/<repo>/actions/workflows/message-me-cve.yml/dispatches`
+   - Schedule: the two times a day you want alerts.
+   - Advanced: request method `POST`, body `{"ref":"main"}`, headers:
+     - `Authorization: Bearer <token>`
+     - `Accept: application/vnd.github+json`
+     - `X-GitHub-Api-Version: 2026-03-10`
+   - Turn on its email notification for failed jobs.
+3. Check: the job's history shows a 2xx status, and a new run appears
+   under **Actions > message-me-cve**.
 
-- GitHub starts scheduled runs hours late. Measured on this account,
-  Nov 1-20 2026: 4.5 to 9.3 hours late, median about 7.3.
-- So the cron is set about 7 hours before you want the alert. 07:41 and
-  15:41 UTC arrive at about 05:00-10:00 and 13:00-18:00 Denver time
-  (MST). An hour later in MDT.
-- Your time zone: pick the two times you want alerts, subtract 7 hours,
-  convert to UTC.
-- Keep it to a few runs a day. Hourly and 11-a-day schedules here ran
-  once in 14 and 20 hours.
-- Turn off: **Actions > message-me-cve > ... > Disable workflow**. Turn
-  on: **Enable workflow**.
-- A change to the cron line applies once pushed to `main`.
+- Any cron that can send this POST works (`curl` from a server, Uptime
+  Kuma, and so on).
+- When the token expires, GitHub rejects the call: cron-job.org emails
+  you and the heartbeat stops.
+- Turn off: pause the cron job, or **Actions > message-me-cve > ... >
+  Disable workflow**.
 
 
 ## Watch lists
@@ -164,7 +173,7 @@ result per channel.
 | Highest CVSS from any source | NVD often scores new CVEs weeks late. The publisher's score (F5 for NGINX, for example) arrives with the CVE. 3.x first, 4.0 if no 3.x. Unscored CVEs wait until a score appears. |
 | State on its own branch | `main` history holds code changes only. One writer (the concurrency group), so no merge conflicts. |
 | One run, then exit | Scheduling belongs to the scheduler (Actions, cron, systemd timer). |
-| Twice a day, scheduled early | Since late August 2026 GitHub starts scheduled runs hours late or drops them ([community #207346](https://github.com/orgs/community/discussions/207346), [#210932](https://github.com/orgs/community/discussions/210932)). Here an hourly cron ran once in 14 hours, while a twice-a-day cron ran 39 of 40 times, 4.5-9.3 hours late. Scheduling early absorbs the delay. A few runs a day cost about 60 minutes a month, inside the free allowance even in a private repo. |
+| Outside cron, not GitHub's `schedule:` | GitHub's docs say scheduled runs can be delayed, and dropped under load ([community #207346](https://github.com/orgs/community/discussions/207346), [#210932](https://github.com/orgs/community/discussions/210932)). On this account it started 4 runs from 60+ scheduled times, Nov 19-21 2026. Manual runs started every time, so an outside cron calls the manual-run API. A few runs a day cost about 60 minutes a month, inside the free allowance even in a private repo. |
 | The check runs `live`, not `main` | CI pushes a commit to `live` only after gofmt, vet, staticcheck, tests, govulncheck and the image smoke test pass. A broken push to `main` never runs. The push is fast-forward only, so a commit whose CI finishes late cannot roll `live` back. |
 | Heartbeat to an outside monitor | A check that does not run cannot report it. Only something outside GitHub Actions can notice the silence. |
 | No write token in the check step | Checkouts do not keep credentials, and the token is passed only to the step that pushes state. The step that parses third-party feed data cannot read it. |
@@ -179,11 +188,12 @@ result per channel.
   alerts list `Fixed in` versions when NVD gives them.
 - **Word matching is name matching.** NVD files every PyPI package under
   vendor `python`; write `python python` to mean CPython only.
-- **Latency is the schedule's.** Two runs a day, each started hours late
-  by GitHub: up to about 21 hours between runs.
-- **The workflow file is not gated.** GitHub runs scheduled workflows from
-  the default branch, so a change to `message-me-cve.yml` applies at the
-  next run without CI. Code and watch lists go through `live`.
+- **Latency is the schedule's.** Two runs a day: a new CVE waits up to
+  the gap between the two runs.
+- **The workflow file is not gated.** The outside cron dispatches on
+  `main`, so GitHub runs the workflow file from `main`: a change to
+  `message-me-cve.yml` applies at the next run without CI. Code and watch
+  lists go through `live`.
 
 
 ## Reference

@@ -1,15 +1,10 @@
 name: message-me-cve
 
-# Twice a day, scheduled early on purpose. GitHub starts scheduled runs
-# hours late: on this account 4.5 to 9.3 h, median about 7.3 h. Frequent
-# schedules mostly do not run at all. 07:41 and 15:41 UTC put the runs at
-# about 05:00-10:00 and 13:00-18:00 Denver time (MST; an hour later in
-# MDT). Late runs only delay alerts: KEV is read in full every run and the
-# NVD cursor covers any gap. NVD is polled at most every 2 h, enforced by
-# the program.
+# Started by an outside cron service through the workflow_dispatch API,
+# not by GitHub's schedule: event, which dropped most runs on this
+# account. See README, Schedule. NVD is polled at most every 2 h, enforced
+# by the program.
 on:
-  schedule:
-    - cron: '41 7,15 * * *'
   workflow_dispatch:
 
 permissions:
