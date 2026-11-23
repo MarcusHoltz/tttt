@@ -43,7 +43,8 @@ func (e *HTTPError) Error() string { return fmt.Sprintf("%s: HTTP %d", e.URL, e.
 // transient reports whether a request may succeed if repeated: network
 // errors, rate limiting and server errors. A 4xx means the request is wrong.
 func transient(err error) bool {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	// Not context.DeadlineExceeded: http.Client timeouts match it too.
+	if errors.Is(err, context.Canceled) {
 		return false
 	}
 	var he *HTTPError

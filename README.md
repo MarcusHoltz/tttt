@@ -335,6 +335,8 @@ Alerts that didn't get delivered are tried again on the next run.
 
 - **Marked sent only after delivery.** A send that fails is tried again next run, not lost.
 
+- **NVD is retried before it counts as down.** A timeout, dropped connection, 429 or 5xx is retried with backoff (30 s doubling to 5 min) for up to an hour per request. A 4xx is not retried.
+
 - **Failures are messaged once, recovery once.** A feed that's down for a day is two messages, not one per run.
 
 - **Highest CVSS score from any source.** NVD often scores a new CVE weeks after it's published, while the publisher's score shows up with the CVE. CVSS 3.x is used first, 4.0 only if there's no 3.x score.
