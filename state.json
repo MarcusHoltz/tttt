@@ -1,6 +1,6 @@
 {
-  "nvd_cursor": "2026-11-22T21:00:34.464157198Z",
-  "nvd_polled": "2026-11-23T01:00:36.5594597Z",
+  "nvd_cursor": "2026-11-23T03:00:38.606106256Z",
+  "nvd_polled": "2026-11-23T03:00:38.606106256Z",
   "sent": {
     "i2p-party-line": {
       "kev:CVE-2014-0160": "2026-11-20T01:43:33.746762731Z",
@@ -144,7 +144,5 @@
       "nvd:CVE-2026-95691": "2026-11-19T02:58:58Z"
     }
   },
-  "broken": {
-    "NVD": "NVD: startIndex=0: Get \"https://services.nvd.nist.gov/rest/json/cves/2.0?lastModEndDate=2026-11-23T01%3A00%3A36.559Z\u0026lastModStartDate=2026-11-22T20%3A55%3A34.464Z\u0026resultsPerPage=2000\u0026startIndex=0\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
-  }
+  "broken": {}
 }
